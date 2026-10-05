@@ -158,12 +158,28 @@ enum Command {
         #[command(subcommand)]
         command: Option<IdentityCommand>,
     },
-    #[command(about = "List or cancel jobs", display_order = 13)]
+    #[command(
+        about = "Inspect workload manifests and adapter registration",
+        display_order = 13
+    )]
+    Workload {
+        #[command(subcommand)]
+        command: WorkloadCommand,
+    },
+    #[command(
+        about = "Inspect available local training adapters",
+        display_order = 14
+    )]
+    Adapter {
+        #[command(subcommand)]
+        command: AdapterCommand,
+    },
+    #[command(about = "List or cancel jobs", display_order = 15)]
     Jobs {
         #[command(subcommand)]
         command: Option<JobsCommand>,
     },
-    #[command(about = "Print the effective configuration", display_order = 14)]
+    #[command(about = "Print the effective configuration", display_order = 16)]
     Config,
     #[command(about = "Optional systemd user service", display_order = 15)]
     Service {
@@ -321,6 +337,39 @@ enum IdentityCommand {
         sequence: u64,
         #[arg(long)]
         valid_until: Option<u64>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum WorkloadCommand {
+    #[command(about = "List built-in workload templates")]
+    List,
+    #[command(about = "Validate and inspect a workload manifest file")]
+    Inspect {
+        #[arg(long)]
+        manifest: PathBuf,
+    },
+    #[command(about = "Run a workload against an external adapter process")]
+    Run {
+        #[arg(long)]
+        manifest: PathBuf,
+        #[arg(long)]
+        adapter_executable: String,
+        #[arg(long, value_delimiter = ',', num_args = 0..)]
+        adapter_args: Vec<String>,
+        #[arg(long, default_value_t = 1)]
+        step: u64,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum AdapterCommand {
+    #[command(about = "List known local adapters")]
+    List,
+    #[command(about = "Inspect a specific adapter registration")]
+    Inspect {
+        #[arg(long)]
+        name: String,
     },
 }
 
@@ -1163,6 +1212,45 @@ async fn execute(
         Command::Doctor => doctor_command(config, json).await?,
         Command::Service { command } => match command {
             ServiceCommand::Install => service_install(config, json)?,
+        },
+        Command::Workload { command } => match command {
+            WorkloadCommand::List => {
+                call_and_print(config, AdminRequest::WorkloadList, json).await?
+            }
+            WorkloadCommand::Inspect { manifest } => {
+                call_and_print(
+                    config,
+                    AdminRequest::WorkloadInspect {
+                        manifest: manifest.to_string_lossy().to_string(),
+                    },
+                    json,
+                )
+                .await?
+            }
+            WorkloadCommand::Run {
+                manifest,
+                adapter_executable,
+                adapter_args,
+                step,
+            } => {
+                call_and_print(
+                    config,
+                    AdminRequest::WorkloadRun {
+                        manifest: manifest.to_string_lossy().to_string(),
+                        adapter_executable,
+                        adapter_args,
+                        step: Some(step),
+                    },
+                    json,
+                )
+                .await?
+            }
+        },
+        Command::Adapter { command } => match command {
+            AdapterCommand::List => call_and_print(config, AdminRequest::AdapterList, json).await?,
+            AdapterCommand::Inspect { name } => {
+                call_and_print(config, AdminRequest::AdapterInspect { name }, json).await?
+            }
         },
         Command::Jobs { command } => match command {
             None => call_and_print(config, AdminRequest::Jobs, json).await?,

@@ -832,6 +832,20 @@ pub enum AdminRequest {
     Peers,
     Capabilities,
     Jobs,
+    WorkloadList,
+    WorkloadInspect {
+        manifest: String,
+    },
+    WorkloadRun {
+        manifest: String,
+        adapter_executable: String,
+        adapter_args: Vec<String>,
+        step: Option<u64>,
+    },
+    AdapterList,
+    AdapterInspect {
+        name: String,
+    },
     Config,
     DhtStats,
     DhtPublish {
@@ -1955,6 +1969,81 @@ impl Node {
             AdminRequest::Peers => AdminResponse::ok(self.peers_json().await),
             AdminRequest::Capabilities => AdminResponse::ok(self.capabilities_json()),
             AdminRequest::Jobs => AdminResponse::ok(self.jobs_json().await),
+            AdminRequest::WorkloadList => AdminResponse::ok(serde_json::json!({
+                "workloads": [intelligence_workload::builtin_training_workload()],
+            })),
+            AdminRequest::WorkloadInspect { manifest } => match std::fs::read(&manifest) {
+                Ok(bytes) => match serde_json::from_slice::<
+                    intelligence_workload::TrainingWorkloadManifest,
+                >(&bytes)
+                {
+                    Ok(workload) => match workload.validate() {
+                        Ok(()) => AdminResponse::ok(serde_json::json!({ "manifest": workload })),
+                        Err(error) => AdminResponse::error(error.to_string()),
+                    },
+                    Err(error) => {
+                        AdminResponse::error(format!("invalid workload manifest: {error}"))
+                    }
+                },
+                Err(error) => {
+                    AdminResponse::error(format!("unable to read workload manifest: {error}"))
+                }
+            },
+            AdminRequest::WorkloadRun {
+                manifest,
+                adapter_executable,
+                adapter_args,
+                step,
+            } => match std::fs::read(&manifest) {
+                Ok(bytes) => match serde_json::from_slice::<
+                    intelligence_workload::TrainingWorkloadManifest,
+                >(&bytes)
+                {
+                    Ok(workload) => match workload.validate() {
+                        Ok(()) => {
+                            let runtime_config = intelligence_workload::LocalAdapterRuntimeConfig {
+                                executable: adapter_executable,
+                                args: adapter_args,
+                                transport: intelligence_workload::LocalAdapterTransport::Stdio,
+                                timeout_ms: 30_000,
+                            };
+                            let mut runtime = match intelligence_workload::LocalAdapterRuntime::new(
+                                runtime_config,
+                            ) {
+                                Ok(runtime) => runtime,
+                                Err(error) => return AdminResponse::error(error.to_string()),
+                            };
+                            let step = step.unwrap_or(1);
+                            match runtime.execute_training_workload(&workload, step) {
+                                Ok(value) => AdminResponse::ok(value),
+                                Err(error) => AdminResponse::error(error.to_string()),
+                            }
+                        }
+                        Err(error) => AdminResponse::error(error.to_string()),
+                    },
+                    Err(error) => {
+                        AdminResponse::error(format!("invalid workload manifest: {error}"))
+                    }
+                },
+                Err(error) => {
+                    AdminResponse::error(format!("unable to read workload manifest: {error}"))
+                }
+            },
+            AdminRequest::AdapterList => AdminResponse::ok(serde_json::json!({
+                "adapters": intelligence_workload::builtin_adapter_registry(),
+            })),
+            AdminRequest::AdapterInspect { name } => AdminResponse::ok(serde_json::json!({
+                "adapter": intelligence_workload::builtin_adapter_registry()
+                    .into_iter()
+                    .find(|item| item["name"].as_str() == Some(name.as_str()))
+                    .unwrap_or_else(|| serde_json::json!({
+                        "name": name,
+                        "transport": "stdio",
+                        "protocol_version": 1,
+                        "framework": "unknown",
+                        "description": "not registered"
+                    }))
+            })),
             AdminRequest::Config => AdminResponse::ok(
                 serde_json::to_value(&self.config).unwrap_or_else(|_| serde_json::json!({})),
             ),

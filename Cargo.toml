@@ -5,6 +5,8 @@ members = [
     "crates/runtime",
     "crates/network",
     "crates/intelligence",
+    "crates/workload",
+    "crates/agents",
     "crates/emulator",
     "crates/node",
     "crates/cli",

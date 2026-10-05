@@ -140,10 +140,10 @@ fn capability(capability: &Capability) -> Result<(), ValidationError> {
 }
 
 fn peer(peer: &PeerRecord) -> Result<(), ValidationError> {
-    if peer.addresses.len() > 8 {
+    if peer.addresses.len() > MAX_ADDRESSES {
         return Err(ValidationError::TooMany {
             field: "peer.addresses",
-            max: 8,
+            max: MAX_ADDRESSES,
         });
     }
     for address in &peer.addresses {

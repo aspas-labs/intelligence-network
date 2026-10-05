@@ -449,6 +449,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "intelligence-agents"
+version = "1.0.0"
+dependencies = [
+ "ed25519-dalek",
+ "intelligence-protocol",
+ "intelligence-runtime",
+ "postcard",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "intelligence-cli"
 version = "1.0.0"
 dependencies = [
@@ -456,6 +470,7 @@ dependencies = [
  "hex",
  "intelligence-node",
  "intelligence-protocol",
+ "intelligence-workload",
  "libc",
  "serde_json",
  "tokio",
@@ -522,6 +537,7 @@ dependencies = [
  "intelligence-protocol",
  "intelligence-runtime",
  "intelligence-storage",
+ "intelligence-workload",
  "libc",
  "postcard",
  "rand 0.8.8",
@@ -570,6 +586,16 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "intelligence-workload"
+version = "1.0.0"
+dependencies = [
+ "intelligence-protocol",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

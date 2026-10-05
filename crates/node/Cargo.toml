@@ -20,6 +20,7 @@ intelligence-network = { path = "../network" }
 intelligence-protocol = { path = "../protocol" }
 intelligence-runtime = { path = "../runtime" }
 intelligence-storage = { path = "../storage" }
+intelligence-workload = { path = "../workload" }
 libc.workspace = true
 postcard.workspace = true
 rand.workspace = true
