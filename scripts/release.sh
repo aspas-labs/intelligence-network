@@ -24,7 +24,7 @@ fi
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-.cache/rust-target}"
 export CARGO_INCREMENTAL=0
 export INTELLIGENCE_COMMIT="${INTELLIGENCE_COMMIT:-${SOURCE_VERSION:-unknown}}"
-cargo build -p intelligence-cli --release --target "$target"
+cargo build --locked -p intelligence-cli --release --target "$target"
 
 bin_name=intelligence
 [[ "$os" == windows ]] && bin_name=intelligence.exe
