@@ -98,6 +98,9 @@ impl FrameHeader {
             return Err(CodecError::UnsupportedVersion { major, minor });
         }
         let kind = FrameKind::try_from(u16::from_le_bytes([bytes[8], bytes[9]]))?;
+        if bytes[10..12] != [0, 0] {
+            return Err(CodecError::UnsupportedVersion { major, minor });
+        }
         let payload_len = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
         let frame_size = FRAME_HEADER_SIZE.saturating_add(payload_len as usize);
         if frame_size > max_frame_size {
@@ -138,6 +141,26 @@ pub enum CodecError {
     },
 }
 
+/// Rejects message kinds that did not exist yet at `minor`. Shared by encode and
+/// decode so a peer on an old minor cannot inject newer message kinds.
+fn ensure_kind_allowed_at_minor(
+    message: &Message,
+    major: u16,
+    minor: u16,
+) -> Result<(), CodecError> {
+    let kind = message.kind();
+    let too_new = (minor == 0 && kind >= 13)
+        || (minor < 2 && kind >= 19)
+        || (minor < 3 && kind >= 21)
+        || (minor < 4 && kind >= 22)
+        || (minor < 6 && kind >= 23)
+        || matches!(message, Message::TrainingV4(training) if minor < training.minimum_minor());
+    if too_new {
+        return Err(CodecError::UnsupportedVersion { major, minor });
+    }
+    Ok(())
+}
+
 pub fn encode_message(message: &Message, max_frame_size: usize) -> Result<Vec<u8>, CodecError> {
     encode_message_at_version(message, max_frame_size, PROTOCOL_MAJOR, PROTOCOL_MINOR)
 }
@@ -152,26 +175,7 @@ pub fn encode_message_at_version(
         return Err(CodecError::UnsupportedVersion { major, minor });
     }
     message.validate()?;
-    if minor == 0 && message.kind() >= 13 {
-        return Err(CodecError::UnsupportedVersion { major, minor });
-    }
-    if minor < 2 && message.kind() >= 19 {
-        return Err(CodecError::UnsupportedVersion { major, minor });
-    }
-    if minor < 3 && message.kind() >= 21 {
-        return Err(CodecError::UnsupportedVersion { major, minor });
-    }
-    if minor < 4 && message.kind() >= 22 {
-        return Err(CodecError::UnsupportedVersion { major, minor });
-    }
-    if minor < 6 && message.kind() >= 23 {
-        return Err(CodecError::UnsupportedVersion { major, minor });
-    }
-    if let Message::TrainingV4(training) = message
-        && minor < training.minimum_minor()
-    {
-        return Err(CodecError::UnsupportedVersion { major, minor });
-    }
+    ensure_kind_allowed_at_minor(message, major, minor)?;
     let payload = postcard::to_allocvec(message)?;
     let frame_size = FRAME_HEADER_SIZE.saturating_add(payload.len());
     if frame_size > max_frame_size {
@@ -216,7 +220,15 @@ pub fn decode_frame(frame: &[u8], max_frame_size: usize) -> Result<Message, Code
             actual: payload.len(),
         });
     }
-    let message: Message = postcard::from_bytes(payload)?;
+    // Reject trailing bytes: two different frames must not decode to one message,
+    // otherwise hashes/dedup over raw bytes can be bypassed.
+    let (message, rest) = postcard::take_from_bytes::<Message>(payload)?;
+    if !rest.is_empty() {
+        return Err(CodecError::LengthMismatch {
+            declared: payload.len() - rest.len(),
+            actual: payload.len(),
+        });
+    }
     let actual =
         FrameKind::try_from(message.kind()).map_err(|_| CodecError::UnknownKind(message.kind()))?;
     if actual != header.kind {
@@ -225,6 +237,7 @@ pub fn decode_frame(frame: &[u8], max_frame_size: usize) -> Result<Message, Code
             actual,
         });
     }
+    ensure_kind_allowed_at_minor(&message, header.major, header.minor)?;
     message.validate()?;
     Ok(message)
 }

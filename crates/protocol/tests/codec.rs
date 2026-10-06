@@ -448,3 +448,37 @@ fn initial_v4_plan_keeps_absent_parent_on_the_wire() {
     assert_eq!(decoded_plan, plan);
     assert_eq!(decoded_plan.parent_plan_hash, None);
 }
+
+fn dht_not_found_frame() -> Vec<u8> {
+    let response = Message::DhtResponse(DhtResponse {
+        request_id: RequestId::from_bytes([5; 16]),
+        responder: NodeId::from_bytes([6; 32]),
+        response: DhtResponseKind::NotFound,
+    });
+    encode_message(&response, MAX_FRAME_SIZE).unwrap()
+}
+
+#[test]
+fn decode_rejects_message_kind_newer_than_the_frame_header_minor() {
+    // A peer that claims minor 1 must not be able to deliver a minor-2 DHT message.
+    let mut frame = dht_not_found_frame();
+    frame[6..8].copy_from_slice(&1u16.to_le_bytes());
+    assert!(decode_frame(&frame, MAX_FRAME_SIZE).is_err());
+}
+
+#[test]
+fn decode_rejects_bytes_trailing_the_payload() {
+    // Otherwise two distinct frames decode to the same message and raw-byte dedup is bypassable.
+    let mut frame = dht_not_found_frame();
+    frame.push(0);
+    let len = (frame.len() - 16) as u32;
+    frame[12..16].copy_from_slice(&len.to_le_bytes());
+    assert!(decode_frame(&frame, MAX_FRAME_SIZE).is_err());
+}
+
+#[test]
+fn decode_rejects_nonzero_reserved_header_bytes() {
+    let mut frame = dht_not_found_frame();
+    frame[10] = 1;
+    assert!(decode_frame(&frame, MAX_FRAME_SIZE).is_err());
+}
