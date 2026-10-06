@@ -1,8 +1,13 @@
-
-Outbound bootstrap and known peer addresses are retried periodically with exponential backoff capped at 30 seconds. This recovers from temporary peer outages, but cannot guarantee connectivity through a blocked firewall, restrictive NAT, or internet outage.
 # Intelligence Network
 
+[![CI](https://github.com/aspas-labs/intelligence-network/actions/workflows/ci.yml/badge.svg)](https://github.com/aspas-labs/intelligence-network/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
+![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-lightgrey.svg)
+
 [English](README.md) | [Português (Brasil)](README.pt-BR.md) | [简体中文](README.zh-CN.md) | [Español](README.es.md)
+
+**Contents:** [Quickstart](#quickstart) · [What you can do](#what-you-can-do) · [How it works](#how-it-works-briefly) · [Where it fits](#where-it-fits) · [Install](#install) · [Run](#run) · [Models](#models) · [CLI reference](#cli-reference) · [Architecture](#architecture) · [Security](#security-and-limitations) · [Development](#development) · [License](#license)
 
 Run AI across independent machines without one central server controlling the network.
 
@@ -40,6 +45,9 @@ On Windows (PowerShell):
 irm https://raw.githubusercontent.com/Cowde-Labs/intelligence-network/main/install.ps1 | iex
 ```
 
+Then:
+
+```bash
 intelligence up              # create an identity, write a config, start the node in the background
 intelligence status          # health, peers, jobs, resource counters
 intelligence infer "hello"   # route a job through the node
@@ -130,6 +138,24 @@ workers under aggregators so the coordinator only sees aggregates, replicates
 optimizer state and checkpoints across peers, and rotates coordination roles
 using monotonically increasing terms when a role holder disappears.
 
+```mermaid
+flowchart LR
+    CLI[intelligence CLI] -- local admin socket --> A
+    subgraph A[Node A]
+        RT[runtime<br/>bounded jobs + bubblewrap]
+        TR[local trust<br/>evidence per peer]
+    end
+    subgraph B[Node B]
+        RT2[runtime]
+    end
+    subgraph C[Node C]
+        RT3[runtime]
+    end
+    A <-- "signed records over QUIC" --> B
+    A <-- "signed records over QUIC" --> C
+    B <-- "DHT / peer exchange" --> C
+```
+
 ```text
 all updates -> one coordinator       NO
 one optimizer-state authority        NO
@@ -137,6 +163,16 @@ one checkpoint authority             NO
 global synchronous barrier           NO
 model must fit on one worker         NO
 ```
+
+## Where it fits
+
+A rough orientation, not a benchmark. Check each project's own docs for current details.
+
+| Project | What it is | How Intelligence Network differs |
+|---|---|---|
+| [libp2p](https://libp2p.io) | Networking library for building P2P apps | This is a complete node (identity, discovery, job routing, training) in one binary, not a toolkit |
+| [Hivemind](https://github.com/learning-at-home/hivemind) | PyTorch library for decentralized training | Rust, no Python stack; also routes inference and keeps trust local per node |
+| [Petals](https://github.com/bigscience-workshop/petals) | Collaborative inference/fine-tuning of large LLMs | Petals targets large public LLMs; this project is reference-scale today and model-agnostic through sandboxed processes |
 
 ## Install
 
@@ -209,6 +245,8 @@ The compiled default seeds are `bootstrap-1.intelligence.network:4000` and
 `bootstrap-2.intelligence.network:4000`. They are replaceable hints: if they
 are down the node says so and carries on, and `--no-default-seeds` or
 `INTELLIGENCE_DEFAULT_SEEDS=host:port,host:port` swaps them out entirely.
+
+Outbound bootstrap and known peer addresses are retried periodically with exponential backoff capped at 30 seconds. This recovers from temporary peer outages, but cannot guarantee connectivity through a blocked firewall, restrictive NAT, or internet outage.
 
 ## Models
 
@@ -413,7 +451,7 @@ Every remote peer is treated as untrusted input. Identities and records are
 signed, artifacts are hash-verified before use, replays and equivocation are
 rejected, and remote work is bounded by size, queue, concurrency, memory,
 rate and timeout. Remote execution of an external process is only allowed
-inside bubblewrap. Full posture in [docs/SECURITY.md](docs/SECURITY.md).
+inside bubblewrap. Full posture in [docs/SECURITY.md](docs/SECURITY.md); how to report a vulnerability is in [SECURITY.md](SECURITY.md).
 
 Be clear-eyed about where this is:
 
@@ -447,7 +485,7 @@ Be clear-eyed about where this is:
   and the job timeout apply. macOS/Windows are verified by CI, not yet by
   long-running deployments.
 
-Report vulnerabilities privately to the maintainers before publishing.
+Report vulnerabilities privately, following [SECURITY.md](SECURITY.md), before publishing.
 
 ## Known open problems
 
